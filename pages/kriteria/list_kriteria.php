@@ -1,6 +1,8 @@
         <h3><i class="fa fa-angle-right"></i> List Kriteria</h3>
         <div class="row mb">
           <!-- page start-->
+           <a type="button" class="btn btn-theme03" href="index.php?module=tambah_kriteria">Tambah Kriteria</a>
+           <hr>
           <div class="content-panel">
             <div class="adv-table" style="padding: 15px;">
               <table cellpadding="0" cellspacing="0" border="0" class="display table table-bordered" id="myDataTables">
