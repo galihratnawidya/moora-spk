@@ -32,8 +32,8 @@ $result = $db->query($sql);
 $kriteria = [];
 foreach ($result as $row) {
     $kriteria[$row['id_kriteria']] = [
-        'nama' => $row['kriteria'],
-        'type' => $row['type'] // benefit / cost
+        'nama'  => $row['kriteria'],
+        'type'  => $row['type'] // benefit / cost
     ];
 }
 
@@ -41,8 +41,6 @@ foreach ($result as $row) {
 // HITUNG BOBOT ROC
 // =======================
 $bobotROC = hitungROC(count($kriteria));
-
-// pasangkan bobot ROC ke kriteria
 $i = 0;
 foreach ($kriteria as $id => $k) {
     $kriteria[$id]['bobot'] = $bobotROC[$i];
@@ -50,7 +48,7 @@ foreach ($kriteria as $id => $k) {
 }
 
 // =======================
-// AMBIL ALTERNATIF (SISWA)
+// AMBIL ALTERNATIF
 // =======================
 $sql = "SELECT * FROM tabel_siswa";
 $result = $db->query($sql);
@@ -61,7 +59,7 @@ foreach ($result as $row) {
 }
 
 // =======================
-// AMBIL NILAI PENILAIAN
+// AMBIL NILAI
 // =======================
 $sql = "SELECT * FROM tabel_nilai ORDER BY id_siswa, id_kriteria";
 $result = $db->query($sql);
@@ -75,10 +73,9 @@ foreach ($result as $row) {
 // NORMALISASI MOORA
 // =======================
 $normal = $sample;
-
 foreach ($kriteria as $id_kriteria => $k) {
     $pembagi = 0;
-    foreach ($sample as $id_siswa => $nilai) {
+    foreach ($sample as $nilai) {
         $pembagi += pow($nilai[$id_kriteria], 2);
     }
     $pembagi = sqrt($pembagi);
@@ -89,20 +86,14 @@ foreach ($kriteria as $id_kriteria => $k) {
 }
 
 // =======================
-// HITUNG NILAI YI (MOORA + ROC)
+// HITUNG YI (MOORA + ROC)
 // =======================
 $optimasi = [];
-
 foreach ($alternatif as $id_siswa => $nama) {
     $optimasi[$id_siswa] = 0;
-
     foreach ($kriteria as $id_kriteria => $k) {
         $nilai = $normal[$id_siswa][$id_kriteria] * $k['bobot'];
-        if ($k['type'] == 'benefit') {
-            $optimasi[$id_siswa] += $nilai;
-        } else {
-            $optimasi[$id_siswa] -= $nilai;
-        }
+        $optimasi[$id_siswa] += ($k['type'] == 'benefit') ? $nilai : -$nilai;
     }
 }
 
@@ -114,7 +105,9 @@ arsort($optimasi);
 // =======================
 // SIMPAN HASIL
 // =======================
-$terima = $_POST['jsiswa'];
+$db->query("TRUNCATE TABLE tabel_hasil");
+
+$terima = isset($_POST['jsiswa']) ? (int)$_POST['jsiswa'] : 0;
 $tanggal = date("Y-m-d H:i:s");
 $rank = 1;
 
@@ -122,8 +115,10 @@ foreach ($optimasi as $id_siswa => $nilai) {
     $nama = $alternatif[$id_siswa];
     $status = ($rank <= $terima) ? "rekomendasi" : "tidak rekomendasi";
 
-    $db->query("INSERT INTO tabel_hasil (nama, nilai, tanggal, status)
-                VALUES ('$nama', '$nilai', '$tanggal', '$status')");
+    $db->query("
+        INSERT INTO tabel_hasil (nama, nilai, tanggal, status)
+        VALUES ('$nama', '$nilai', '$tanggal', '$status')
+    ");
 
     $rank++;
 }
