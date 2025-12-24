@@ -1,163 +1,142 @@
 <?php
-//-- konfigurasi database
+// =======================================================
+// KONFIGURASI DATABASE
+// =======================================================
 $dbhost = 'localhost';
 $dbuser = 'root';
 $dbpass = '';
 $dbname = 'moora';
-//-- koneksi ke database server dengan extension mysqli
-$db = new mysqli($dbhost,$dbuser,$dbpass,$dbname);
-//-- hentikan program dan tampilkan pesan kesalahan jika koneksi gagal
+
+$db = new mysqli($dbhost, $dbuser, $dbpass, $dbname);
 if ($db->connect_error) {
-   die('Connect Error ('.$db->connect_errno.')'.$db->connect_error);
+    die('Connect Error (' . $db->connect_errno . ') ' . $db->connect_error);
 }
 
-// PROSES PENGALMBILAN KRITERIA DARI DB
+// =======================================================
+// FUNGSI ROC (PEMBOTOTAN KRITERIA)
+// =======================================================
+function hitungROC($jumlahKriteria)
+{
+    $bobot = [];
+    for ($k = 1; $k <= $jumlahKriteria; $k++) {
+        $total = 0;
+        for ($i = $k; $i <= $jumlahKriteria; $i++) {
+            $total += 1 / $i;
+        }
+        $bobot[] = $total / $jumlahKriteria;
+    }
+    return $bobot;
+}
 
-$sql = 'SELECT * FROM tabel_kriteria';
+// =======================================================
+// AMBIL DATA KRITERIA
+// =======================================================
+$sql = "SELECT * FROM tabel_kriteria ORDER BY id_kriteria";
 $result = $db->query($sql);
-//-- menyiapkan variable penampung berupa array
-$kriteria=array();
-//-- melakukan iterasi pengisian array untuk tiap record data yang didapat
+
+$kriteria = [];
 foreach ($result as $row) {
-   $kriteria[$row['id_kriteria']]=array($row['kriteria'],$row['type'],$row['bobot']);
+    $kriteria[$row['id_kriteria']] = [
+        'nama' => $row['kriteria'],
+        'type' => $row['type'] // benefit / cost
+    ];
 }
 
-// MENAMPILKAN KRITERIA
-print_r($kriteria);
-echo "<br><br> Tampilan Kriteria<br><br>";
-foreach ($kriteria as $id_kriteria => $value) {
-   echo $kriteria[$id_kriteria][0]." ".$kriteria[$id_kriteria][1]." = ".$kriteria[$id_kriteria][2]."<br>";
+// HITUNG BOBOT ROC
+$bobotROC = hitungROC(count($kriteria));
+
+// MASUKKAN BOBOT ROC KE ARRAY KRITERIA
+$no = 0;
+foreach ($kriteria as $id => $val) {
+    $kriteria[$id]['bobot'] = $bobotROC[$no];
+    $no++;
 }
 
-//proses pengambilan nilai
-
-$sql = 'SELECT * FROM tabel_siswa';
+// =======================================================
+// AMBIL DATA SISWA (ALTERNATIF)
+// =======================================================
+$sql = "SELECT * FROM tabel_siswa";
 $result = $db->query($sql);
-//-- menyiapkan variable penampung berupa array
-$alternatif=array();
-//-- melakukan iterasi pengisian array untuk tiap record data yang didapat
+
+$alternatif = [];
 foreach ($result as $row) {
-   $alternatif[$row['id_siswa']]=array($row['nama'],
-                                               $row['jenis_kelamin'],
-                                    $row['alamat'],
-                                    $row['KPS'],
-                                    $row['PKH'],
-                                    $row['status'],
-                                    $row['ekonomi'],
-                                    $row['penghasilan']);
+    $alternatif[$row['id_siswa']] = $row['nama'];
 }
 
-//MENAMPILKAN NILAI ALTERNATIF
-echo "<br> INPUTAN ALTERNATIF <br>===================<br>";
-foreach ($alternatif as $id_siswa => $value) {
-   for ($i=0; $i <= 7 ; $i++) { 
-      echo $alternatif[$id_siswa][$i]." ";
-   }
-   echo "<br>";
-}
-
-//proses merubah nilai ke angka
-
-//-- query untuk mendapatkan semua data sample penilaian di tabel moo_nilai
-$sql = 'SELECT * FROM tabel_nilai ORDER BY id_siswa,id_kriteria';
+// =======================================================
+// AMBIL NILAI PENILAIAN
+// =======================================================
+$sql = "SELECT * FROM tabel_nilai ORDER BY id_siswa, id_kriteria";
 $result = $db->query($sql);
-//-- menyiapkan variable penampung berupa array
-$sample=array();
-//-- melakukan iterasi pengisian array untuk tiap record data yang didapat
+
+$sample = [];
 foreach ($result as $row) {
-   //-- jika array $sample[$row['id_alternatif']] belum ada maka buat baru
-   //-- $row['id_alternatif'] adalah id kandidat/alternatif
-   if (!isset($sample[$row['id_siswa']])) {
-      $sample[$row['id_siswa']] = array();
-   }
-   $sample[$row['id_siswa']][$row['id_kriteria']] = $row['nilai'];
+    $sample[$row['id_siswa']][$row['id_kriteria']] = $row['nilai'];
 }
 
-//MeNAMPILKAN PERUBAHAN NILAI KE ANGKA
-echo "<br> KONVERSI NILAI ANGKA <br>==================<br>";
-foreach ($sample as $id_sample => $value) {
-   foreach ($kriteria as $id_kriteria => $value) {
-      echo $sample[$id_sample][$id_kriteria]." ";
-   }
-   echo "<br>";
+// =======================================================
+// NORMALISASI MOORA
+// =======================================================
+$normal = $sample;
+
+foreach ($kriteria as $id_kriteria => $k) {
+    $pembagi = 0;
+    foreach ($sample as $id_siswa => $nilai) {
+        $pembagi += pow($sample[$id_siswa][$id_kriteria], 2);
+    }
+    $pembagi = sqrt($pembagi);
+
+    foreach ($sample as $id_siswa => $nilai) {
+        $normal[$id_siswa][$id_kriteria] =
+            $sample[$id_siswa][$id_kriteria] / $pembagi;
+    }
 }
 
+// =======================================================
+// HITUNG NILAI OPTIMASI (MOORA + ROC)
+// =======================================================
+$optimasi = [];
 
-//PROSES NORMALISASI MATRIX
-//-- inisialisasi nilai normalisasi dengan nilai dari $sample
-$normal=$sample;
-foreach($kriteria as $id_kriteria=>$k){
-   //-- inisialisasi nilai pembagi tiap kriteria
-   $pembagi=0;
-   foreach($alternatif as $id_siswa=>$a){
-      $pembagi+=pow($sample[$id_siswa][$id_kriteria],2);
-   }
-   foreach($alternatif as $id_alternatif=>$a){
-      $normal[$id_alternatif][$id_kriteria]/=sqrt($pembagi);
-   }
+foreach ($alternatif as $id_siswa => $nama) {
+    $optimasi[$id_siswa] = 0;
+    foreach ($kriteria as $id_kriteria => $k) {
+        $nilai = $normal[$id_siswa][$id_kriteria] * $k['bobot'];
+        if ($k['type'] == 'benefit') {
+            $optimasi[$id_siswa] += $nilai;
+        } else {
+            $optimasi[$id_siswa] -= $nilai;
+        }
+    }
 }
 
-//MENAMPILKAN NORMALISASI MATRIX
-echo "<br> NORMALISASI MATRIX <br>==================<br>";
-foreach ($normal as $id_normal => $value) {
-   foreach ($kriteria as $id_kriteria => $value) {
-      echo $normal[$id_normal][$id_kriteria]." | ";
-   }
-   echo "<br>";
-}
-
-
-//MENGHITUNG NILAI OPTIMASI
-$optimasi=array();
-foreach($alternatif as $id_siswa=>$a){
-   $optimasi[$id_siswa]=0;
-   foreach($kriteria as $id_kriteria=>$k){
-      $optimasi[$id_siswa]+=$normal[$id_siswa][$id_kriteria]*($k[1]=='benefit'?1:-1)*$k[2];
-   }
-}
-
-//menampilkan NILAI OPTIMASI
-
-echo "<br> NILAI OPTIMASI <br>==================<br>";
-foreach ($optimasi as $id_optimasi => $value) {
-      echo $alternatif[$id_optimasi][0].$id_optimasi."<br>".$optimasi[$id_optimasi];
-   echo "<br>=======<br>";
-}
-
-//MERANGKING
-
-//--mengurutkan data secara descending dengan tetap mempertahankan key/index array-nya
+// =======================================================
+// RANKING
+// =======================================================
 arsort($optimasi);
-//-- mendapatkan key/index item array yang pertama
-$index=key($optimasi);
 
-//-- menampilkan hasil akhir
-echo "<br> NILAI OPTIMASI URUT <br>==================<br>";
-foreach ($optimasi as $id_optimasi => $value) {
-      echo $alternatif[$id_optimasi][0].$id_optimasi."<br>".$optimasi[$id_optimasi];
-   echo "<br>=======<br>";
-}
-
-echo "<br> HASIL 3 TERTINGGI <br>==================<br>";
-$rank = 1;
+// =======================================================
+// SIMPAN HASIL
+// =======================================================
 $terima = $_POST['jsiswa'];
-$tanggal =  date("Y-m-d h:i:s");
-foreach ($optimasi as $id_optimasi => $value) {
-      echo $alternatif[$id_optimasi][0].$id_optimasi."<br>".$optimasi[$id_optimasi];
-      $nama_simpan = $alternatif[$id_optimasi][0];
-      if ($rank <= $terima) {
-        $sqlInput = "INSERT INTO tabel_hasil (nama, nilai,tanggal,status)
-        VALUES ('$nama_simpan','$optimasi[$id_optimasi]','$tanggal','rekomendasi')";
-        $db->query($sqlInput);
-      }else{
-        $sqlInput = "INSERT INTO tabel_hasil (nama, nilai,tanggal,status)
-        VALUES ('$nama_simpan','$optimasi[$id_optimasi]','$tanggal','tidak rekomendasi')";
-        $db->query($sqlInput);
-      }
-      echo "<br>=======<br>";
-      $rank++;
+$tanggal = date("Y-m-d H:i:s");
+$rank = 1;
+
+foreach ($optimasi as $id_siswa => $nilai) {
+    $nama = $alternatif[$id_siswa];
+    $status = ($rank <= $terima) ? 'rekomendasi' : 'tidak rekomendasi';
+
+    $sql = "INSERT INTO tabel_hasil (nama, nilai, tanggal, status)
+            VALUES ('$nama', '$nilai', '$tanggal', '$status')";
+    $db->query($sql);
+
+    $rank++;
 }
 
-echo "<script>alert('data berhasil di hitung');window.location = '../../index.php?module=list_hasil';</script>";
-
+// =======================================================
+// SELESAI
+// =======================================================
+echo "<script>
+alert('Perhitungan MOORA + ROC berhasil');
+window.location='../../index.php?module=list_hasil';
+</script>";
 ?>
