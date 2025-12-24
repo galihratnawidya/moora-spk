@@ -8,39 +8,50 @@ if ($db->connect_error) {
 }
 
 // =======================
-// FUNGSI ROC
+// FUNGSI ROC (BENAR)
 // =======================
-function hitungROC($jumlahKriteria)
+function hitungBobotROC($kriteria)
 {
+    // Urutkan berdasarkan ranking (1 = paling penting)
+    usort($kriteria, function ($a, $b) {
+        return $a['ranking'] <=> $b['ranking'];
+    });
+
+    $n = count($kriteria);
     $bobot = [];
-    for ($k = 1; $k <= $jumlahKriteria; $k++) {
+
+    for ($i = 0; $i < $n; $i++) {
+        $rank = $i + 1;
         $total = 0;
-        for ($i = $k; $i <= $jumlahKriteria; $i++) {
-            $total += 1 / $i;
+        for ($j = $rank; $j <= $n; $j++) {
+            $total += 1 / $j;
         }
-        $bobot[] = $total / $jumlahKriteria;
+        $bobot[] = $total / $n;
     }
+
     return $bobot;
 }
 
 // =======================
-// AMBIL KRITERIA
+// AMBIL DATA KRITERIA
 // =======================
-$sql = "SELECT * FROM tabel_kriteria ORDER BY id_kriteria ASC";
+$sql = "SELECT * FROM tabel_kriteria ORDER BY bobot ASC";
 $result = $db->query($sql);
 
 $kriteria = [];
-foreach ($result as $row) {
+while ($row = $result->fetch_assoc()) {
     $kriteria[$row['id_kriteria']] = [
-        'nama'  => $row['kriteria'],
-        'type'  => $row['type'] // benefit / cost
+        'nama'    => $row['kriteria'],
+        'type'    => $row['type'],      // benefit / cost
+        'ranking' => (int)$row['bobot'] // INI RANKING
     ];
 }
 
 // =======================
 // HITUNG BOBOT ROC
 // =======================
-$bobotROC = hitungROC(count($kriteria));
+$bobotROC = hitungBobotROC(array_values($kriteria));
+
 $i = 0;
 foreach ($kriteria as $id => $k) {
     $kriteria[$id]['bobot'] = $bobotROC[$i];
@@ -48,76 +59,89 @@ foreach ($kriteria as $id => $k) {
 }
 
 // =======================
-// AMBIL ALTERNATIF
+// AMBIL DATA ALTERNATIF
 // =======================
 $sql = "SELECT * FROM tabel_siswa";
 $result = $db->query($sql);
 
 $alternatif = [];
-foreach ($result as $row) {
+while ($row = $result->fetch_assoc()) {
     $alternatif[$row['id_siswa']] = $row['nama'];
 }
 
 // =======================
-// AMBIL NILAI
+// AMBIL DATA NILAI
 // =======================
 $sql = "SELECT * FROM tabel_nilai ORDER BY id_siswa, id_kriteria";
 $result = $db->query($sql);
 
-$sample = [];
-foreach ($result as $row) {
-    $sample[$row['id_siswa']][$row['id_kriteria']] = $row['nilai'];
+$nilai = [];
+while ($row = $result->fetch_assoc()) {
+    $nilai[$row['id_siswa']][$row['id_kriteria']] = $row['nilai'];
 }
 
 // =======================
 // NORMALISASI MOORA
 // =======================
-$normal = $sample;
+$normalisasi = [];
+
 foreach ($kriteria as $id_kriteria => $k) {
+
     $pembagi = 0;
-    foreach ($sample as $nilai) {
-        $pembagi += pow($nilai[$id_kriteria], 2);
+    foreach ($nilai as $n) {
+        if (isset($n[$id_kriteria])) {
+            $pembagi += pow($n[$id_kriteria], 2);
+        }
     }
     $pembagi = sqrt($pembagi);
 
-    foreach ($sample as $id_siswa => $nilai) {
-        $normal[$id_siswa][$id_kriteria] /= $pembagi;
+    foreach ($nilai as $id_siswa => $n) {
+        $normalisasi[$id_siswa][$id_kriteria] =
+            ($pembagi == 0) ? 0 : $n[$id_kriteria] / $pembagi;
     }
 }
 
 // =======================
 // HITUNG YI (MOORA + ROC)
 // =======================
-$optimasi = [];
+$hasil = [];
+
 foreach ($alternatif as $id_siswa => $nama) {
-    $optimasi[$id_siswa] = 0;
+    $hasil[$id_siswa] = 0;
+
     foreach ($kriteria as $id_kriteria => $k) {
-        $nilai = $normal[$id_siswa][$id_kriteria] * $k['bobot'];
-        $optimasi[$id_siswa] += ($k['type'] == 'benefit') ? $nilai : -$nilai;
+        $nilaiNormal = $normalisasi[$id_siswa][$id_kriteria];
+        $nilaiBobot  = $nilaiNormal * $k['bobot'];
+
+        $hasil[$id_siswa] +=
+            ($k['type'] == 'benefit') ? $nilaiBobot : -$nilaiBobot;
     }
 }
 
 // =======================
 // RANKING
 // =======================
-arsort($optimasi);
+arsort($hasil);
 
 // =======================
 // SIMPAN HASIL
 // =======================
 $db->query("TRUNCATE TABLE tabel_hasil");
 
-$terima = isset($_POST['jsiswa']) ? (int)$_POST['jsiswa'] : 0;
+$jumlahTerima = isset($_POST['jsiswa']) ? (int)$_POST['jsiswa'] : 0;
 $tanggal = date("Y-m-d H:i:s");
 $rank = 1;
 
-foreach ($optimasi as $id_siswa => $nilai) {
+foreach ($hasil as $id_siswa => $nilaiAkhir) {
+
     $nama = $alternatif[$id_siswa];
-    $status = ($rank <= $terima) ? "rekomendasi" : "tidak rekomendasi";
+    $status = ($rank <= $jumlahTerima)
+        ? "rekomendasi"
+        : "tidak rekomendasi";
 
     $db->query("
         INSERT INTO tabel_hasil (nama, nilai, tanggal, status)
-        VALUES ('$nama', '$nilai', '$tanggal', '$status')
+        VALUES ('$nama', '$nilaiAkhir', '$tanggal', '$status')
     ");
 
     $rank++;
@@ -126,5 +150,8 @@ foreach ($optimasi as $id_siswa => $nilai) {
 // =======================
 // SELESAI
 // =======================
-echo "<script>alert('Perhitungan MOORA + ROC berhasil');window.location='../../index.php?module=list_hasil';</script>";
+echo "<script>
+    alert('Perhitungan MOORA + ROC berhasil');
+    window.location='../../index.php?module=list_hasil';
+</script>";
 ?>
