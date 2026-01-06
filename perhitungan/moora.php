@@ -3,7 +3,7 @@ include "../config/koneksi.php";
 include "../function/roc.php";
 
 /* =========================
-   1. AMBIL DATA KRITERIA
+   1. DATA KRITERIA
 ========================= */
 $qKriteria = mysqli_query($koneksi, "
     SELECT id_kriteria, nama_kriteria, tipe, prioritas
@@ -17,12 +17,12 @@ while ($row = mysqli_fetch_assoc($qKriteria)) {
 }
 
 /* =========================
-   2. HITUNG BOBOT ROC
+   2. BOBOT ROC
 ========================= */
 $bobotROC = hitungBobotROC($kriteria);
 
 /* =========================
-   3. AMBIL DATA ALTERNATIF
+   3. DATA ALTERNATIF
 ========================= */
 $qAlt = mysqli_query($koneksi, "SELECT id_alternatif, nama_alternatif FROM alternatif");
 $alternatif = [];
@@ -31,17 +31,16 @@ while ($row = mysqli_fetch_assoc($qAlt)) {
 }
 
 /* =========================
-   4. AMBIL NILAI MATRKS
+   4. MATRKS KEPUTUSAN
 ========================= */
 $matriks = [];
 $qNilai = mysqli_query($koneksi, "SELECT * FROM penilaian");
-
 while ($row = mysqli_fetch_assoc($qNilai)) {
     $matriks[$row['id_alternatif']][$row['id_kriteria']] = $row['nilai'];
 }
 
 /* =========================
-   5. NORMALISASI MOORA
+   5. NORMALISASI
 ========================= */
 $pembagi = [];
 foreach ($kriteria as $k) {
@@ -49,14 +48,15 @@ foreach ($kriteria as $k) {
     $pembagi[$idk] = 0;
 
     foreach ($alternatif as $ida => $nama) {
-        $pembagi[$idk] += pow($matriks[$ida][$idk], 2);
+        $nilaiAwal = isset($matriks[$ida][$idk]) ? $matriks[$ida][$idk] : 0;
+        $pembagi[$idk] += pow($nilaiAwal, 2);
     }
 
     $pembagi[$idk] = sqrt($pembagi[$idk]);
 }
 
 /* =========================
-   6. HITUNG Yi MOORA + ROC
+   6. NILAI Yi
 ========================= */
 $Yi = [];
 
@@ -66,7 +66,14 @@ foreach ($alternatif as $ida => $nama) {
 
     foreach ($kriteria as $k) {
         $idk = $k['id_kriteria'];
-        $normal = $matriks[$ida][$idk] / $pembagi[$idk];
+        $nilaiAwal = isset($matriks[$ida][$idk]) ? $matriks[$ida][$idk] : 0;
+
+        if ($pembagi[$idk] != 0) {
+            $normal = $nilaiAwal / $pembagi[$idk];
+        } else {
+            $normal = 0;
+        }
+
         $nilai = $normal * $bobotROC[$idk];
 
         if ($k['tipe'] == 'benefit') {
@@ -83,3 +90,13 @@ foreach ($alternatif as $ida => $nama) {
    7. RANKING
 ========================= */
 arsort($Yi);
+
+/* =========================
+   OUTPUT
+========================= */
+echo "<h3>Hasil Perangkingan MOORA + ROC</h3>";
+$rank = 1;
+foreach ($Yi as $id => $nilai) {
+    echo $rank . ". " . $alternatif[$id] . " = " . round($nilai, 4) . "<br>";
+    $rank++;
+}
