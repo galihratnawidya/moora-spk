@@ -72,12 +72,6 @@ if (empty($_SESSION['namauser'])) {
         </a>
       </li>
 
-      <!-- MENU ROC -->
-      <li>
-        <a href="index.php?module=roc">
-          <i class="fa fa-balance-scale"></i> <span>ROC</span>
-        </a>
-      </li>
 
     </ul>
   </div>
@@ -96,14 +90,33 @@ switch ($module) {
         include "pages/home/home.php";
         break;
 
+    // --- MANAJEMEN KRITERIA ---
     case 'list_kriteria':
         include "pages/kriteria/list_kriteria.php";
         break;
+        
+    case 'tambah_kriteria': // Tambahkan ini
+        include "pages/kriteria/tambah_kriteria.php";
+        break;
 
+    case 'update_kriteria': // Tambahkan ini agar tidak lari ke Home
+        include "pages/kriteria/update_kriteria.php";
+        break;
+
+    // --- MANAJEMEN SISWA ---
     case 'list_siswa':
         include "pages/siswa/list_siswa.php";
         break;
 
+    case 'tambah_siswa': // Sebaiknya tambahkan juga jika ada fiturnya
+        include "pages/siswa/tambah_siswa.php";
+        break;
+
+    case 'update_siswa': // Sebaiknya tambahkan juga jika ada fiturnya
+        include "pages/siswa/update_siswa.php";
+        break;
+
+    // --- HASIL & HITUNG ---
     case 'list_hasil':
         include "pages/hasil/list_hasil.php";
         break;
@@ -124,7 +137,6 @@ switch ($module) {
 
 </section>
 </section>
-
 <!-- ================= FOOTER ================= -->
 <footer class="site-footer">
   <div class="text-center">
