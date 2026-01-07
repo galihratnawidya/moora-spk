@@ -108,6 +108,10 @@ switch ($module) {
         include "pages/siswa/list_siswa.php";
         break;
 
+    case 'list_detail_siswa':
+        include "pages/hasil/list_siswa.php";
+        break;
+
     case 'tambah_siswa': // Sebaiknya tambahkan juga jika ada fiturnya
         include "pages/siswa/tambah_siswa.php";
         break;
